@@ -1,0 +1,8 @@
+1. Adjust moving speed in mobility models ( Randomly change speed or constant speed) ( Maybe make a new mobility model)
+2. Try different wifi physical layer models.
+3. Figure out how to get meaningful output ( Throughput, performance, delay , packetdrops )
+
+
+----
+
+See different routing protocols ( hops ,overheads )

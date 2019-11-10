@@ -8,6 +8,9 @@
 #include "ns3/yans-wifi-helper.h"
 #include "ns3/ssid.h"
 #include "ns3/netanim-module.h"
+#include "ns3/flow-monitor-module.h"
+#include "ns3/wifi-module.h"
+
 
 using namespace ns3;
 
@@ -18,21 +21,23 @@ int main(int argc, char* argv[]){
     uint32_t nWifi = 6;
     uint32_t nPackets = 1;
     uint32_t packetSize = 1024;
-
+    bool verbose = false;
     CommandLine cmd;
 
     cmd.AddValue ("Wifi", "Number of Wifi STA devices", nWifi);
     cmd.AddValue ("nPackets", "Number of packets to be sent from each station device", nPackets);
     cmd.AddValue ("packetSize", "Size of Each packet",packetSize);
-
+    cmd.AddValue ("verbose","Enable Applcation Logging",verbose);
     cmd.Parse (argc,argv);
 
     
 
     //Enable Log for applications
-    LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_INFO);
-    LogComponentEnable ("UdpEchoServerApplication", LOG_LEVEL_INFO);
-
+    if(verbose){
+        LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_INFO);
+        LogComponentEnable ("UdpEchoServerApplication", LOG_LEVEL_INFO);
+    }
+    
     NodeContainer wifiStaNodes;
     wifiStaNodes.Create(nWifi > 6?nWifi:6);
     
@@ -56,7 +61,7 @@ int main(int argc, char* argv[]){
     wifi.SetRemoteStationManager ("ns3::AarfWifiManager");
 
     //For mobile nodes
-    WifiMacHelper mac;
+    NqosWifiMacHelper mac = NqosWifiMacHelper::Default ();
     Ssid ssid = Ssid("base-station");
     mac.SetType ("ns3::StaWifiMac",
                "Ssid", SsidValue (ssid),
@@ -111,7 +116,7 @@ int main(int argc, char* argv[]){
 
     UdpEchoClientHelper echoClient (wifiInterfaces.GetAddress (0), 1234);
     echoClient.SetAttribute ("MaxPackets", UintegerValue (nPackets));
-    echoClient.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
+    echoClient.SetAttribute ("Interval", TimeValue (Seconds (0.25)));
     echoClient.SetAttribute ("PacketSize", UintegerValue (packetSize));
 
     //Install UDP client in each sta nodes
@@ -123,16 +128,46 @@ int main(int argc, char* argv[]){
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
+    //Throughput creation
+    FlowMonitorHelper flowmon;
+    Ptr<FlowMonitor> monitor = flowmon.InstallAll();
+
     //Tracing stuff
     
 
-    Simulator::Stop (Seconds (20.0));
+    Simulator::Stop (Seconds (200.0));
 
     //Netanim stuff
 
     AnimationInterface anim ("wifi-seven.xml");
     
     Simulator::Run ();
+
+    monitor->CheckForLostPackets();
+    Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
+    std::map<FlowId, FlowMonitor::FlowStats> stats = monitor->GetFlowStats ();
+    float avgThroughput = 0;
+    float totalflows = 0;
+    int lostPackets = 0;
+    for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
+    {
+	    Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
+        std::cout << "---- Flow " << i->first  << " (" << t.sourceAddress << " -> " << t.destinationAddress << ") ---- \n";
+        std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
+        std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
+        std::cout << " Lost packets: " << i->second.lostPackets << "\n";
+        std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / (i->second.timeLastRxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds())/1024/1024  << " Mbps\n";
+        std::cout << " Delay: " << i->second.delaySum << "\n";
+        avgThroughput += i->second.rxBytes * 8.0 / (i->second.timeLastRxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds())/1024/1024 ;
+        totalflows++;
+
+        lostPackets += i->second.lostPackets;
+    }
+
+    std::cout << "------- Summary -----" << "\n";
+    std::cout << "Distinct packet flows: "<<totalflows<<"\n";
+    std::cout <<"Average Throughput: "<<avgThroughput/totalflows<<"\n";
+    std::cout << "Total Packets Lost: " << lostPackets<<"\n";
     Simulator::Destroy ();
     return 0;
 }

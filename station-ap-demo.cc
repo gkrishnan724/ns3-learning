@@ -20,6 +20,7 @@
 #include "ns3/wave-bsm-helper.h"
 #include "ns3/wave-helper.h"
 #include "ns3/netanim-module.h"
+#include "ns3/simple-wireless-tdma-module.h"
 
 using namespace ns3;
 
@@ -86,6 +87,8 @@ public:
    */
   void SetRxPkts (uint32_t rxPkts);
 
+
+
   /**
    * \brief Returns the number of bytes transmitted
    * \return the number of bytes transmitted
@@ -138,6 +141,18 @@ public:
    */
   void SetTxPkts (uint32_t txPkts);
 
+  /*
+    Getter  and setter for delay
+   */
+
+  double GetDelaySum();
+
+  double GetCumulativeDelaySum();
+
+  void SetDelaySum(double delay);
+
+  void IncDelaySum(double delay);
+
 private:
   uint32_t m_RxBytes;
   uint32_t m_cumulativeRxBytes;
@@ -147,6 +162,8 @@ private:
   uint32_t m_cumulativeTxBytes;
   uint32_t m_TxPkts;
   uint32_t m_cumulativeTxPkts;
+  double m_delaySum;
+  double m_cumulativeDelaySum;
 };
 
 RoutingStats::RoutingStats ()
@@ -157,7 +174,9 @@ RoutingStats::RoutingStats ()
     m_TxBytes (0),
     m_cumulativeTxBytes (0),
     m_TxPkts (0),
-    m_cumulativeTxPkts (0)
+    m_cumulativeTxPkts (0),
+    m_delaySum(0),
+    m_cumulativeDelaySum(0)
 {
 }
 
@@ -260,6 +279,28 @@ RoutingStats::SetTxPkts (uint32_t txPkts)
 {
   m_TxPkts = txPkts;
 }
+
+double
+RoutingStats::GetDelaySum(){
+  return m_delaySum; 
+}
+
+double
+RoutingStats::GetCumulativeDelaySum(){
+  return m_cumulativeDelaySum; 
+}
+
+void
+RoutingStats::SetDelaySum(double delay){
+  m_delaySum = delay;
+}
+
+void
+RoutingStats::IncDelaySum(double delay){
+  m_delaySum += delay;
+  m_cumulativeDelaySum += delay;
+}
+
 
 
 class RoutingHelper : public Object
@@ -374,6 +415,7 @@ private:
   RoutingStats routingStats;
   std::string m_protocolName;
   int m_log;
+  uint32_t m_packetSize;
 };
 
 NS_OBJECT_ENSURE_REGISTERED (RoutingHelper);
@@ -393,7 +435,8 @@ RoutingHelper::RoutingHelper ()
     m_port (9),
     m_nSinks (0),
     m_routingTables (0),
-    m_log (0)
+    m_log (0),
+    m_packetSize(64)
 {
 }
 
@@ -468,23 +511,18 @@ RoutingHelper::SetupRoutingMessages (NodeContainer & c,
   Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable> ();
   int64_t stream = 2;
   var->SetStream (stream);
-  for (uint32_t i = 0; i < m_nSinks; i++)
+
+  //Use Base Station as Sink
+  Ptr<Socket> sink = SetupRoutingPacketReceive (adhocTxInterfaces.GetAddress (0), c.Get (0));
+  AddressValue remoteAddress (InetSocketAddress (adhocTxInterfaces.GetAddress (0), m_port));
+  for (uint32_t i = 1; i < m_nSinks; i++)
     {
    
-      if (m_protocol != 0)
-        {
-          if(m_log != 0){
-            std::cout<<"Node "<<i<<" is set up as Packet Sink\n";
-            std::cout<<"Node "<<i+m_nSinks<<" is set up as Packet Source\n";
-          }
-          
-          Ptr<Socket> sink = SetupRoutingPacketReceive (adhocTxInterfaces.GetAddress (i), c.Get (i));
-        }
-
-      AddressValue remoteAddress (InetSocketAddress (adhocTxInterfaces.GetAddress (i), m_port));
+ 
+     
       onoff1.SetAttribute ("Remote", remoteAddress);
 
-      ApplicationContainer temp = onoff1.Install (c.Get (i + m_nSinks));
+      ApplicationContainer temp = onoff1.Install (c.Get (i));
       temp.Start (Seconds (var->GetValue (1.0,2.0)));
       temp.Stop (Seconds (m_TotalSimTime));
     }
@@ -519,9 +557,12 @@ RoutingHelper::ReceiveRoutingPacket (Ptr<Socket> socket)
   while ((packet = socket->Recv ()))
     {
       // application data, for goodput
+      SeqTsHeader seqTs;
       uint32_t RxRoutingBytes = packet->GetSize ();
       GetRoutingStats ().IncRxBytes (RxRoutingBytes);
+      packet->RemoveHeader (seqTs);
       GetRoutingStats ().IncRxPkts ();
+      GetRoutingStats().IncDelaySum((Simulator::Now() - seqTs.GetTs()).GetSeconds()); //Transmission Time
       if (m_log != 0)
         {
           NS_LOG_UNCOND (m_protocolName + " " + PrintReceivedRoutingPacket (socket, packet));
@@ -534,6 +575,7 @@ RoutingHelper::OnOffTrace (std::string context, Ptr<const Packet> packet)
 {
   uint32_t pktBytes = packet->GetSize ();
   routingStats.IncTxBytes (pktBytes);
+  routingStats.IncTxPkts();
 }
 
 RoutingStats &
@@ -932,7 +974,10 @@ private:
   double m_baseAntennaGain;
   double m_nodeAntennaGain;
   double m_nodeAntennaHeight;
- 
+  int m_guardTime;
+  int m_slotTime;
+  int m_interFrameTime;
+  uint32_t m_packetSize;
   Ptr<RoutingHelper> m_routingHelper;
   Ptr<FlowMonitor> m_monitor;
   int m_log;
@@ -961,7 +1006,7 @@ Experiment::Experiment()
     m_lossModelName (""),
     m_logFile ("low_ct-unterstrass-1day.filt.5.adj.log"),
     m_mobility (2),
-    m_nNodes (10),
+    m_nNodes (50),
     m_nBase(1),
     m_TotalSimTime (300),
     //OnoffApplication frequency
@@ -984,7 +1029,13 @@ Experiment::Experiment()
     m_nodeAntennaHeight(9),
     m_baseAntennaGain(18.6),
     m_nodeAntennaGain(14.6),
-    m_allNodes()
+    m_allNodes(),
+    m_txp(400),
+    m_guardTime(100),
+    m_interFrameTime(0),
+    m_slotTime(1100),
+    m_packetSize(64)
+    
     
 {
 
@@ -1016,7 +1067,8 @@ void Experiment::ParseCommandLineArguments(int argc, char** argv){
   cmd.AddValue("nodeHeight","Antenna Height for Node in meters",m_nodeAntennaHeight);
   cmd.AddValue("baseGain","Antenna Gain for base station",m_baseAntennaGain);
   cmd.AddValue("nodeGain","Antenna Gain for ABE",m_nodeAntennaGain);
-  cmd.AddValue("Frequency","Operating frequency in hz",m_freq);
+  cmd.AddValue("frequency","Operating frequency in hz",m_freq);
+  cmd.AddValue("packetSize","Packet Size in bytes",m_packetSize);
   
 
 }
@@ -1112,14 +1164,7 @@ void Experiment::ConfigureChannels(){
 
     m_baseDevices = wifi.Install(basePhy,wifiMac,m_baseNodes);
 
-  }
-  else if(m_macMode == 1){
-    //TBD STDMA / TDMA
-
-
-  }
-  
- if (m_asciiTrace != 0)
+    if (m_asciiTrace != 0)
     {
       AsciiTraceHelper ascii;
       Ptr<OutputStreamWrapper> osw = ascii.CreateFileStream ( (m_trName +  "-base.tr").c_str ());
@@ -1127,18 +1172,41 @@ void Experiment::ConfigureChannels(){
       basePhy.EnableAsciiAll (osw);
       nodePhy.EnableAsciiAll (osw1);
     }
-  if (m_pcap != 0)
-    {
-      basePhy.EnablePcapAll ("base-station-pcap");
-      nodePhy.EnablePcapAll ("node-pcap");
+    if (m_pcap != 0)
+      {
+        basePhy.EnablePcapAll ("base-station-pcap");
+        nodePhy.EnablePcapAll ("node-pcap");
+      }
+
+    for(uint32_t i=0;i<m_nBase;i++){
+      m_allDevices.Add(m_baseDevices.Get(i));
+    }
+    for(uint32_t i=0;i<m_nNodes;i++){
+      m_allDevices.Add(m_TxDevices.Get(i));
     }
 
-  for(uint32_t i=0;i<m_nBase;i++){
-    m_allDevices.Add(m_baseDevices.Get(i));
   }
-  for(uint32_t i=0;i<m_nNodes;i++){
-    m_allDevices.Add(m_TxDevices.Get(i));
+  else if(m_macMode == 1){
+    
+    //TBD STDMA / TDMA
+    TdmaHelper tdma = TdmaHelper(m_allNodes.GetN(),m_allNodes.GetN());
+    TdmaControllerHelper controller;
+    controller.Set ("SlotTime", TimeValue (MicroSeconds (m_slotTime)));
+    controller.Set ("GuardTime", TimeValue (MicroSeconds (m_guardTime)));
+    controller.Set ("InterFrameTime", TimeValue (MicroSeconds (m_interFrameTime)));
+    tdma.SetTdmaControllerHelper (controller);
+    m_allDevices = tdma.Install (m_allNodes);
+
+    if(m_asciiTrace != 0){
+      AsciiTraceHelper ascii;
+      Ptr<OutputStreamWrapper> stream = ascii.CreateFileStream (m_trName + "-tdma.tr");
+      tdma.EnableAsciiAll (stream);
+    }
   }
+
+  
+  
+ 
 
 }
 
@@ -1171,7 +1239,7 @@ void Experiment::ConfigureMobility(){
     ObjectFactory pos2;
     pos2.SetTypeId ("ns3::RandomBoxPositionAllocator");
     pos2.Set ("X", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=1500.0]"));
-    pos2.Set ("Y", StringValue ("ns3::UniformRandomVariable[Min=10.0|Max=300]"));
+    pos2.Set ("Y", StringValue ("ns3::UniformRandomVariable[Min=10.0|Max=1500.0]"));
     Ptr<PositionAllocator> nodePositionAlloc = pos2.Create ()->GetObject<PositionAllocator> ();
     m_streamIndex += nodePositionAlloc->AssignStreams (m_streamIndex);
 
@@ -1193,8 +1261,8 @@ void Experiment::ConfigureMobility(){
     //Random Way Point
     ObjectFactory pos2;
     pos2.SetTypeId ("ns3::RandomBoxPositionAllocator");
-    pos2.Set ("X", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=300.0]"));
-    pos2.Set ("Y", StringValue ("ns3::UniformRandomVariable[Min=10.0|Max=300]"));
+    pos2.Set ("X", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=1500.0]"));
+    pos2.Set ("Y", StringValue ("ns3::UniformRandomVariable[Min=10.0|Max=1500]"));
     Ptr<PositionAllocator> nodePositionAlloc = pos2.Create ()->GetObject<PositionAllocator> ();
     m_streamIndex += nodePositionAlloc->AssignStreams (m_streamIndex);
 
@@ -1248,13 +1316,30 @@ void Experiment::RunSimulation(){
 
   
   
-  std::cout<<"Tx Bytes: "<<m_routingHelper->GetRoutingStats().GetTxBytes()<<"\n";
-  std::cout<<"Rx Bytes: "<<m_routingHelper->GetRoutingStats().GetRxBytes()<<"\n";
+  std::cout<<"Tx Bytes: "<<m_routingHelper->GetRoutingStats().GetCumulativeTxBytes()<<"\n";
+  std::cout<<"Rx Bytes: "<<m_routingHelper->GetRoutingStats().GetCumulativeRxBytes()<<"\n";
   
   Simulator::Destroy ();
 }
 
 void Experiment::ProcessOutputs(){
+
+
+  
+  double averageRoutingGoodputKbps = 0.0;
+  uint32_t totalBytesTotal = m_routingHelper->GetRoutingStats ().GetCumulativeRxBytes ();
+  averageRoutingGoodputKbps = (((double) totalBytesTotal * 8.0) / m_TotalSimTime) / 1000.0;
+  double pdr = ((double)m_routingHelper->GetRoutingStats().GetCumulativeRxPkts() * 100)/((double)m_routingHelper->GetRoutingStats().GetCumulativeTxPkts());
+  double packetLoss = ((double)m_routingHelper->GetRoutingStats().GetCumulativeTxPkts() -  (double)m_routingHelper->GetRoutingStats().GetCumulativeRxPkts());
+
+  double avgDelay = (m_routingHelper->GetRoutingStats().GetCumulativeDelaySum())/(double)m_routingHelper->GetRoutingStats().GetCumulativeRxPkts();
+
+
+
+  std::cout<<"avgThroughput: "<<averageRoutingGoodputKbps<<" kbps\n";
+  std::cout<<"Packet Delivery Ratio: "<<pdr<<"%\n";
+  std::cout<<"Total Packets lost: "<<packetLoss<<"\n";
+  std::cout<<"average Delay: "<<avgDelay<<" seconds\n";
 
 //Measure Throughput w.r.t no of nodes,
     //Measure packet loss
@@ -1289,8 +1374,10 @@ void Experiment::SetupLogFile(){
 
 void Experiment::SetDefaultAttributeValues(){
 
-  Config::SetDefault ("ns3::OnOffApplication::PacketSize",StringValue ("64"));
+  Config::SetDefault ("ns3::OnOffApplication::PacketSize",StringValue(std::to_string(m_packetSize)));
   Config::SetDefault ("ns3::OnOffApplication::DataRate",  StringValue (m_rate));
+  Config::SetDefault ("ns3::SimpleWirelessChannel::MaxRange", DoubleValue (m_txp));
+
 
 }
 

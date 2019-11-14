@@ -877,7 +877,9 @@ public:
    */
   Experiment ();
   Experiment(double yDist,uint32_t mobility,uint32_t nodes,uint32_t macMode,uint32_t lossmodel,double txp,FileHandle* fh);
-
+  Experiment(FileHandle* fh,std::string rate,uint32_t nodes);
+  Experiment(FileHandle* fh,int slot,int guard);
+  Experiment(FileHandle* fh,uint32_t size,int slot);
   ~Experiment();
 
 protected:
@@ -1089,6 +1091,7 @@ private:
   NodeContainer m_allNodes;
   std::string m_exp;
   int m_cumulativeCaptureStart;
+  uint32_t m_scenario;
   // FlowMonitorHelper m_flowmon;
   double m_yPos;
 
@@ -1134,12 +1137,13 @@ Experiment::Experiment()
     m_baseAntennaGain(18.6),
     m_nodeAntennaGain(14.6),
     m_allNodes(),
-    m_txp(4),
+    m_txp(40000),
     m_guardTime(100),
     m_interFrameTime(0),
     m_slotTime(1100),
     m_packetSize(64),
-    m_yPos(30000)  
+    m_yPos(30000),
+    m_scenario(0)  
 {
   m_routingHelper = CreateObject<RoutingHelper> ();
   m_log = 1;
@@ -1202,6 +1206,175 @@ Experiment::Experiment(double yDist,uint32_t mobility,uint32_t nodes,uint32_t ma
   m_fh = fh;
 }
 
+Experiment::Experiment(FileHandle* fh,std::string rate,uint32_t nodes)
+:m_port (9),
+    m_CSVfileName ("experiment.output.csv"),
+    m_CSVfileName2 ("experiment.output2.csv"),
+    m_nSinks (5),
+    m_protocolName ("protocol"),
+    m_traceMobility (false),
+    // Differnt Routing Protocls
+    m_protocol (2),
+    // Different Loss models
+    m_lossModel (4),
+    m_fading (0),
+    m_lossModelName (""),
+    m_logFile ("low_ct-unterstrass-1day.filt.5.adj.log"),
+    m_mobility (2),
+    m_nNodes (10),
+    m_nBase(1),
+    m_TotalSimTime (300),
+    //OnoffApplication frequency
+    m_rate ("2048bps"),
+    m_trName ("experiment-compare"),
+    m_nodeSpeed (50),
+    m_nodePause (0),
+    m_verbose (0),
+    m_macMode (1),
+    m_routingTables (0),
+    m_asciiTrace (0),
+    m_pcap (0),
+    m_log (1),
+    m_streamIndex (0),
+    m_TxNodes (),
+    m_exp (""),
+    m_cumulativeCaptureStart (0),
+    m_freq(5.8e9),
+    m_baseAntennaHeight(50),
+    m_nodeAntennaHeight(9),
+    m_baseAntennaGain(18.6),
+    m_nodeAntennaGain(14.6),
+    m_allNodes(),
+    m_txp(40000),
+    m_guardTime(100),
+    m_interFrameTime(0),
+    m_slotTime(1100),
+    m_packetSize(64),
+    m_yPos(30000),
+    m_scenario(0)  
+{
+  m_nNodes = nodes;
+  m_routingHelper = CreateObject<RoutingHelper> ();
+  m_log = 1;
+  m_fh = fh;
+  m_rate = rate;
+  m_scenario = 1;
+}
+
+
+Experiment::Experiment(FileHandle* fh,int slot,int guard)
+:m_port (9),
+    m_CSVfileName ("experiment.output.csv"),
+    m_CSVfileName2 ("experiment.output2.csv"),
+    m_nSinks (5),
+    m_protocolName ("protocol"),
+    m_traceMobility (false),
+    // Differnt Routing Protocls
+    m_protocol (2),
+    // Different Loss models
+    m_lossModel (4),
+    m_fading (0),
+    m_lossModelName (""),
+    m_logFile ("low_ct-unterstrass-1day.filt.5.adj.log"),
+    m_mobility (2),
+    m_nNodes (10),
+    m_nBase(1),
+    m_TotalSimTime (300),
+    //OnoffApplication frequency
+    m_rate ("2048bps"),
+    m_trName ("experiment-compare"),
+    m_nodeSpeed (50),
+    m_nodePause (0),
+    m_verbose (0),
+    m_macMode (1),
+    m_routingTables (0),
+    m_asciiTrace (0),
+    m_pcap (0),
+    m_log (1),
+    m_streamIndex (0),
+    m_TxNodes (),
+    m_exp (""),
+    m_cumulativeCaptureStart (0),
+    m_freq(5.8e9),
+    m_baseAntennaHeight(50),
+    m_nodeAntennaHeight(9),
+    m_baseAntennaGain(18.6),
+    m_nodeAntennaGain(14.6),
+    m_allNodes(),
+    m_txp(40000),
+    m_guardTime(100),
+    m_interFrameTime(0),
+    m_slotTime(1100),
+    m_packetSize(64),
+    m_yPos(30000),
+    m_scenario(0)  
+{
+  
+  m_routingHelper = CreateObject<RoutingHelper> ();
+  m_log = 1;
+  m_fh = fh;
+  m_scenario = 2;
+  m_slotTime = slot;
+  m_guardTime = guard;
+}
+
+
+Experiment::Experiment(FileHandle* fh,uint32_t packet,int slot)
+:m_port (9),
+    m_CSVfileName ("experiment.output.csv"),
+    m_CSVfileName2 ("experiment.output2.csv"),
+    m_nSinks (5),
+    m_protocolName ("protocol"),
+    m_traceMobility (false),
+    // Differnt Routing Protocls
+    m_protocol (2),
+    // Different Loss models
+    m_lossModel (4),
+    m_fading (0),
+    m_lossModelName (""),
+    m_logFile ("low_ct-unterstrass-1day.filt.5.adj.log"),
+    m_mobility (2),
+    m_nNodes (10),
+    m_nBase(1),
+    m_TotalSimTime (300),
+    //OnoffApplication frequency
+    m_rate ("2048bps"),
+    m_trName ("experiment-compare"),
+    m_nodeSpeed (50),
+    m_nodePause (0),
+    m_verbose (0),
+    m_macMode (1),
+    m_routingTables (0),
+    m_asciiTrace (0),
+    m_pcap (0),
+    m_log (1),
+    m_streamIndex (0),
+    m_TxNodes (),
+    m_exp (""),
+    m_cumulativeCaptureStart (0),
+    m_freq(5.8e9),
+    m_baseAntennaHeight(50),
+    m_nodeAntennaHeight(9),
+    m_baseAntennaGain(18.6),
+    m_nodeAntennaGain(14.6),
+    m_allNodes(),
+    m_txp(40000),
+    m_guardTime(100),
+    m_interFrameTime(0),
+    m_slotTime(1100),
+    m_packetSize(64),
+    m_yPos(30000),
+    m_scenario(0)  
+{
+  m_routingHelper = CreateObject<RoutingHelper> ();
+  m_log = 1;
+  m_fh = fh;
+  m_packetSize = packet;  
+  m_slotTime = slot;
+  m_scenario = 3;
+}
+
+
 Experiment::~Experiment ()
 {
 }
@@ -1229,7 +1402,7 @@ void Experiment::ParseCommandLineArguments(int argc, char** argv){
   cmd.AddValue("nodeGain","Antenna Gain for ABE",m_nodeAntennaGain);
   cmd.AddValue("frequency","Operating frequency in hz",m_freq);
   cmd.AddValue("packetSize","Packet Size in bytes",m_packetSize);
-  
+  SetupScenario();
 
 }
 
@@ -1416,12 +1589,16 @@ void Experiment::ConfigureMobility(){
     m_streamIndex += nodePositionAlloc->AssignStreams (m_streamIndex);
 
     mobility.SetMobilityModel ("ns3::RandomWalk2dMobilityModel",
-                            "Bounds", RectangleValue (Rectangle (0, 1500, 10, 1500)),
-                            "PositionAllocator",PointerValue(nodePositionAlloc),
+                            "Bounds", RectangleValue (Rectangle (0, 1500, 10, 38000)),
                             "Speed",StringValue(ssSpeed.str()),
                             "Distance",DoubleValue(10.0));
 
-    mobility.SetPositionAllocator (nodePositionAlloc);
+    mobility.SetPositionAllocator("ns3::GridPositionAllocator",
+                                  "MinX",DoubleValue(50.0),
+                                  "MinY",DoubleValue(100.0),
+                                  "DeltaX",DoubleValue(100.0),
+                                  "GridWidth",UintegerValue(10),
+                                  "LayoutType",StringValue("RowFirst"));
 
     mobility.Install(m_TxNodes);
 
@@ -1431,20 +1608,20 @@ void Experiment::ConfigureMobility(){
   }
   else if(m_mobility == 2){
     //Random Way Point
-    ObjectFactory pos2;
-    pos2.SetTypeId ("ns3::RandomBoxPositionAllocator");
-    pos2.Set ("X", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=1500.0]"));
-    pos2.Set ("Y", StringValue ("ns3::UniformRandomVariable[Min=10.0|Max=1500]"));
-    Ptr<PositionAllocator> nodePositionAlloc = pos2.Create ()->GetObject<PositionAllocator> ();
-    m_streamIndex += nodePositionAlloc->AssignStreams (m_streamIndex);
+    
+    ObjectFactory pos;
+    pos.SetTypeId ("ns3::RandomRectanglePositionAllocator");
+    pos.Set ("X", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=100.0]"));
+    pos.Set ("Y", StringValue ("ns3::UniformRandomVariable[Min=10.0|Max=30000.0]"));
+    Ptr<PositionAllocator> taPositionAlloc = pos.Create ()->GetObject<PositionAllocator> ();
+
 
     mobility.SetMobilityModel ("ns3::RandomWaypointMobilityModel",
                                       "Speed", StringValue (ssSpeed.str ()),
                                       "Pause", StringValue (ssPause.str ()),
-                                      "PositionAllocator", PointerValue (nodePositionAlloc));
+                                      "PositionAllocator", PointerValue (taPositionAlloc));
 
-    mobility.SetPositionAllocator (nodePositionAlloc);
-
+    
     mobility.Install(m_TxNodes);
 
     m_streamIndex += mobility.AssignStreams (m_TxNodes, m_streamIndex);
@@ -1532,10 +1709,30 @@ void Experiment::ProcessOutputs(){
 
   std::ostringstream oss;
   oss.str ("");
-  oss << m_nNodes << "," << averageRoutingGoodputKbps << "," << avgDelay << ","
-   << m_routingHelper->GetRoutingStats ().GetCumulativeRxPkts ()
-   << "," << packetLoss << "," << pdr << std::endl;
-  m_fh->WriteData(oss.str());
+  if(m_scenario == 1){
+    oss << m_nNodes << "," << averageRoutingGoodputKbps << "," << avgDelay << ","
+    << m_routingHelper->GetRoutingStats ().GetCumulativeRxPkts ()
+    << "," << m_rate << "," << pdr << std::endl;
+    m_fh->WriteData(oss.str());
+  }
+  else if(m_scenario == 2){
+    oss << m_nNodes << "," << averageRoutingGoodputKbps << "," << avgDelay << ","
+    << packetLoss
+    << "," <<m_slotTime<<","<< m_guardTime << "," << pdr << std::endl;
+    m_fh->WriteData(oss.str());
+  }
+  else if(m_scenario == 3){
+    oss << m_nNodes << "," << averageRoutingGoodputKbps << "," << avgDelay << ","
+    << m_slotTime 
+    << "," << m_packetSize << "," << pdr << std::endl;
+    m_fh->WriteData(oss.str());
+  }
+  else{
+    oss << m_nNodes << "," << averageRoutingGoodputKbps << "," << avgDelay << ","
+    << m_routingHelper->GetRoutingStats ().GetCumulativeRxPkts ()
+    << "," << packetLoss << "," << pdr << std::endl;
+    m_fh->WriteData(oss.str());
+  }
  
     
 
@@ -1580,7 +1777,18 @@ void Experiment::ConfigureDevices(){
 }
 
 void Experiment::SetupScenario(){
+  if(m_scenario == 1){
+    //Tdma set no of nodes with different transmission rates
+    m_mobility = 2;
+    m_macMode = 1;
 
+  }
+
+  if(m_scenario == 2){
+    m_mobility = 2;
+    m_macMode = 1;
+    m_nNodes = 20;
+  }
 }
 
 
@@ -1593,15 +1801,78 @@ int main (int argc, char *argv[])
   // Experiment experiment;
   // experiment.Simulate (argc, argv);
 
-  //Running stationary node with tdma txp = 40000
+  // Running stationary node with tdma txp = 40000
 
-  FileHandle fh = FileHandle("exp_stats.csv");
+  FileHandle fh = FileHandle("nNode_stats.csv");
   fh.WriteHeader("n_nodes,throughput,delay,packetRx,packetLoss,pdr");
   double txp = 40000;
   for(int i=10;i<100;i+=10){
-    
-    Experiment(3000,2,i,1,1,txp,&fh).Simulate(argc,argv);
+    Experiment(30000,2,i,1,1,txp,&fh).Simulate(argc,argv);
   }
+
+  FileHandle fh2 = FileHandle("slotTime_stats.csv");
+  fh2.WriteHeader("n_nodes,throughput,delay,packetLoss,slotTime,guardTime,pdr");
+  for(int i=0;i<20;i++){
+    int time = 1100+(500*(i+1));
+    Experiment(&fh2,time,100).Simulate(argc,argv);
+  }
+
+
+  FileHandle fh3 = FileHandle("guardTime_stats.csv");
+  fh3.WriteHeader("n_nodes,throughput,delay,packetLoss,slotTime,guardTime,pdr");
+  for(int i=1;i<=20;i++){
+    int time = 100+(i*50);
+    Experiment(&fh3,1100,time).Simulate(argc,argv);
+  }
+
+  FileHandle fh5 = FileHandle("slotPacket_stats1100.csv");
+  fh5.WriteHeader("n_nodes,throughput,delay,slotTime,packetSize,pdr");
+  for(int i=0;i<20;i++){
+    int size = 64*(i+1);
+    Experiment(&fh5,size,1100).Simulate(argc,argv);
+  }
+
+  FileHandle fh6 = FileHandle("slotPacket_stats3300.csv");
+  fh6.WriteHeader("n_nodes,throughput,delay,slotTime,packetSize,pdr");
+  for(int i=0;i<20;i++){
+    int size = 64*(i+1);
+    Experiment(&fh6,size,3300).Simulate(argc,argv);
+  }
+
+  
+  FileHandle fh4 = FileHandle("frissLoss.csv");
+  fh4.WriteHeader("txpower,distance,rxpower");
+  double txPower = 21;
+  Ptr<ConstantPositionMobilityModel> a = CreateObject<ConstantPositionMobilityModel> ();
+  Ptr<ConstantPositionMobilityModel> b = CreateObject<ConstantPositionMobilityModel> ();
+  a->SetPosition (Vector (0.0, 0.0, 0.0));
+  Ptr<FriisPropagationLossModel> friss = CreateObject <FriisPropagationLossModel>();
+  for(int i=10;i<50000;i++){
+    
+    b->SetPosition(Vector((double)i,0.0,0.0));
+    double rxPowerDbm = friss->CalcRxPower (txPower, a, b);
+    std::ostringstream oss;
+    oss.str ("");
+    oss << txPower << "," << i << "," << rxPowerDbm << std::endl;
+    fh4.WriteData(oss.str());
+  }
+
+  FileHandle fh7 = FileHandle("TwoRayLoss.csv");
+  fh7.WriteHeader("txpower,distance,rxpower");
+  a->SetPosition (Vector (0.0, 0.0, 0.0));
+  Ptr<TwoRayGroundPropagationLossModel> tworay = CreateObject <TwoRayGroundPropagationLossModel>();
+  tworay->SetHeightAboveZ(56000);
+  for(int i=10;i<50000;i++){
+    
+    b->SetPosition(Vector((double)i,0.0,0.0));
+    double rxPowerDbm = tworay->CalcRxPower (txPower, a, b);
+    std::ostringstream oss;
+    oss.str ("");
+    oss << txPower << "," << i << "," << rxPowerDbm << std::endl;
+    fh7.WriteData(oss.str());
+  }
+
+  
   
   
 }

@@ -14,7 +14,7 @@
 #include "ns3/ocb-wifi-mac.h"
 #include "ns3/wifi-80211p-helper.h"
 #include "ns3/wave-mac-helper.h"
-#include "ns3/flow-monitor-module.h"
+// #include "ns3/flow-monitor-module.h"
 #include "ns3/config-store-module.h"
 #include "ns3/integer.h"
 #include "ns3/wave-bsm-helper.h"
@@ -86,6 +86,15 @@ public:
    * \return none
    */
   void SetRxPkts (uint32_t rxPkts);
+
+
+  Time GetFirstTxTime();
+
+  void SetFirstTxTime(Time t);
+
+  Time GetLastRxTime();
+
+  void SetLastRxTime(Time t);
 
 
 
@@ -164,6 +173,9 @@ private:
   uint32_t m_cumulativeTxPkts;
   double m_delaySum;
   double m_cumulativeDelaySum;
+
+  Time m_firstTxTime;
+  Time m_lastRxTime;
 };
 
 RoutingStats::RoutingStats ()
@@ -301,7 +313,22 @@ RoutingStats::IncDelaySum(double delay){
   m_cumulativeDelaySum += delay;
 }
 
+Time RoutingStats::GetFirstTxTime(){
+  return m_firstTxTime;
+}
 
+Time RoutingStats::GetLastRxTime(){
+  return m_lastRxTime;
+}
+
+void RoutingStats::SetFirstTxTime(Time t){
+  m_firstTxTime = t;
+}
+
+void RoutingStats::SetLastRxTime(Time t){
+  m_lastRxTime = t;
+
+}
 
 class RoutingHelper : public Object
 {
@@ -416,6 +443,7 @@ private:
   std::string m_protocolName;
   int m_log;
   uint32_t m_packetSize;
+  uint32_t m_nNodes;
 };
 
 NS_OBJECT_ENSURE_REGISTERED (RoutingHelper);
@@ -457,6 +485,7 @@ RoutingHelper::Install (NodeContainer & c,
   m_protocol = protocol;
   m_nSinks = nSinks;
   m_routingTables = routingTables;
+  m_nNodes = i.GetN();
 
   SetupRoutingProtocol (c);
   AssignIpAddresses (d, i);
@@ -514,12 +543,17 @@ RoutingHelper::SetupRoutingMessages (NodeContainer & c,
 
   //Use Base Station as Sink
   Ptr<Socket> sink = SetupRoutingPacketReceive (adhocTxInterfaces.GetAddress (0), c.Get (0));
-  AddressValue remoteAddress (InetSocketAddress (adhocTxInterfaces.GetAddress (0), m_port));
-  for (uint32_t i = 1; i < m_nSinks; i++)
+  // AddressValue remoteAddress (InetSocketAddress ("10.1.255.255", m_port));
+  // onoff1.SetAttribute("Remote",remoteAddress);
+  // ApplicationContainer baseApp = onoff1.Install (c.Get (0));
+  // baseApp.Start (Seconds (var->GetValue (1.0,2.0)));
+  // baseApp.Stop(Seconds(m_TotalSimTime));
+  AddressValue remoteAddress(InetSocketAddress(adhocTxInterfaces.GetAddress(0),m_port));
+  for (uint32_t i = 1; i < adhocTxInterfaces.GetN(); i++)
     {
    
  
-     
+      Ptr<Socket> nodeSink = SetupRoutingPacketReceive (adhocTxInterfaces.GetAddress (i), c.Get (i));
       onoff1.SetAttribute ("Remote", remoteAddress);
 
       ApplicationContainer temp = onoff1.Install (c.Get (i));
@@ -567,6 +601,8 @@ RoutingHelper::ReceiveRoutingPacket (Ptr<Socket> socket)
         {
           NS_LOG_UNCOND (m_protocolName + " " + PrintReceivedRoutingPacket (socket, packet));
         }
+
+      GetRoutingStats().SetLastRxTime(Simulator::Now());
     }
 }
 
@@ -574,8 +610,34 @@ void
 RoutingHelper::OnOffTrace (std::string context, Ptr<const Packet> packet)
 {
   uint32_t pktBytes = packet->GetSize ();
-  routingStats.IncTxBytes (pktBytes);
-  routingStats.IncTxPkts();
+  Ptr<Packet> copy = packet->Copy();
+  // Ipv4Header iph;
+  // copy->RemoveHeader(iph);
+  // std::cout<<iph.GetDestination()<<"\n";
+  // Ipv4Mask mask = Ipv4Mask("255.255.0.0");
+  // if(iph.GetDestination().IsSubnetDirectedBroadcast(mask)){
+  //   routingStats.IncTxBytes(pktBytes*(m_nNodes - 1));
+  //   if(routingStats.GetTxPkts() == 0){
+  //   routingStats.SetFirstTxTime(Simulator::Now());
+  //   }
+  //   for(int i=0;i<m_nNodes-1;i++){
+  //     routingStats.IncTxPkts();
+  //   }
+  // }
+  // else{
+  //   if(routingStats.GetTxPkts() == 0){
+  //     routingStats.SetFirstTxTime(Simulator::Now());
+  //   }
+  //   routingStats.IncTxBytes (pktBytes);
+  //   routingStats.IncTxPkts();
+  // }
+
+    if(routingStats.GetTxPkts() == 0){
+      routingStats.SetFirstTxTime(Simulator::Now());
+    }
+    routingStats.IncTxBytes (pktBytes);
+    routingStats.IncTxPkts();
+    
 }
 
 RoutingStats &
@@ -589,6 +651,44 @@ RoutingHelper::SetLogging (int log)
 {
   m_log = log;
 }
+
+
+class FileHandle{
+  public:
+    std::string m_filename;
+    std::ofstream m_outFile;
+
+    FileHandle(std::string filename);
+
+    void WriteHeader(std::string string);
+
+    void WriteData(std::string string);
+    
+    void Close();
+
+};
+
+FileHandle::FileHandle(std::string filename){
+  m_filename = filename;
+}
+
+void FileHandle::WriteHeader(std::string string){
+  m_outFile = std::ofstream(m_filename.c_str());
+  m_outFile << string << std::endl;
+  m_outFile.close();
+}
+
+void FileHandle::WriteData(std::string string){
+  m_outFile = std::ofstream(m_filename.c_str(),std::ios::app);
+  m_outFile << string << std::endl;
+  Close();
+}
+
+void FileHandle::Close(){
+  m_outFile.close();
+}
+
+
 
 class WifiApp
 {
@@ -776,6 +876,7 @@ public:
    * \return none
    */
   Experiment ();
+  Experiment(double yDist,uint32_t mobility,uint32_t nodes,uint32_t macMode,uint32_t lossmodel,double txp,FileHandle* fh);
 
   ~Experiment();
 
@@ -979,7 +1080,7 @@ private:
   int m_interFrameTime;
   uint32_t m_packetSize;
   Ptr<RoutingHelper> m_routingHelper;
-  Ptr<FlowMonitor> m_monitor;
+  // Ptr<FlowMonitor> m_monitor;
   int m_log;
   // used to get consistent random numbers across scenarios
   int64_t m_streamIndex;
@@ -988,11 +1089,64 @@ private:
   NodeContainer m_allNodes;
   std::string m_exp;
   int m_cumulativeCaptureStart;
-  FlowMonitorHelper m_flowmon;
+  // FlowMonitorHelper m_flowmon;
+  double m_yPos;
+
+  FileHandle* m_fh;
 };
 
 Experiment::Experiment()
-  : m_port (9),
+ :m_port (9),
+    m_CSVfileName ("experiment.output.csv"),
+    m_CSVfileName2 ("experiment.output2.csv"),
+    m_nSinks (5),
+    m_protocolName ("protocol"),
+    m_traceMobility (false),
+    // Differnt Routing Protocls
+    m_protocol (2),
+    // Different Loss models
+    m_lossModel (4),
+    m_fading (0),
+    m_lossModelName (""),
+    m_logFile ("low_ct-unterstrass-1day.filt.5.adj.log"),
+    m_mobility (2),
+    m_nNodes (10),
+    m_nBase(1),
+    m_TotalSimTime (300),
+    //OnoffApplication frequency
+    m_rate ("2048bps"),
+    m_trName ("experiment-compare"),
+    m_nodeSpeed (50),
+    m_nodePause (0),
+    m_verbose (0),
+    m_macMode (1),
+    m_routingTables (0),
+    m_asciiTrace (0),
+    m_pcap (0),
+    m_log (1),
+    m_streamIndex (0),
+    m_TxNodes (),
+    m_exp (""),
+    m_cumulativeCaptureStart (0),
+    m_freq(5.8e9),
+    m_baseAntennaHeight(50),
+    m_nodeAntennaHeight(9),
+    m_baseAntennaGain(18.6),
+    m_nodeAntennaGain(14.6),
+    m_allNodes(),
+    m_txp(4),
+    m_guardTime(100),
+    m_interFrameTime(0),
+    m_slotTime(1100),
+    m_packetSize(64),
+    m_yPos(30000)  
+{
+  m_routingHelper = CreateObject<RoutingHelper> ();
+  m_log = 1;
+}
+
+Experiment::Experiment(double yDist,uint32_t mobility,uint32_t nodes,uint32_t macMode,uint32_t lossmodel,double txp,FileHandle* fh)
+:m_port (9),
     m_CSVfileName ("experiment.output.csv"),
     m_CSVfileName2 ("experiment.output2.csv"),
     m_nSinks (5),
@@ -1030,18 +1184,24 @@ Experiment::Experiment()
     m_baseAntennaGain(18.6),
     m_nodeAntennaGain(14.6),
     m_allNodes(),
-    m_txp(400),
+    m_txp(4),
     m_guardTime(100),
     m_interFrameTime(0),
     m_slotTime(1100),
-    m_packetSize(64)
-    
-    
+    m_packetSize(64),
+    m_yPos(0)     
 {
-
+  m_yPos = yDist;
+  m_mobility = mobility;
+  m_nNodes = nodes;
+  m_macMode = macMode;
+  m_lossModel = m_lossModel;
+  m_txp = txp;
   m_routingHelper = CreateObject<RoutingHelper> ();
   m_log = 1;
+  m_fh = fh;
 }
+
 Experiment::~Experiment ()
 {
 }
@@ -1058,7 +1218,7 @@ void Experiment::ParseCommandLineArguments(int argc, char** argv){
   cmd.AddValue ("fading", "0=None;1=Nakagami;(buildings=1 overrides)", m_fading);
   cmd.AddValue ("logFile", "Log file", m_logFile);
   cmd.AddValue ("mobility", "1=RandomWalk2d;2=RandomWayPoint", m_mobility);
-  cmd.AddValue ("rate", "Rate", m_rate);
+  cmd.AddValue ("rate in bps", "Rate", m_rate);
   cmd.AddValue ("speed", "Node speed (m/s)", m_nodeSpeed);
   cmd.AddValue ("pause", "Node pause (s)", m_nodePause);
   cmd.AddValue ("verbose", "0=quiet;1=verbose", m_verbose);
@@ -1086,72 +1246,72 @@ void Experiment::ConfigureNodes(){
 
 void Experiment::ConfigureChannels(){
 
-  if (m_lossModel == 1)
-    {
-      m_lossModelName = "ns3::FriisPropagationLossModel";
-    }
-  else if (m_lossModel == 2)
-    {
-      m_lossModelName = "ns3::ItuR1411LosPropagationLossModel";
-    }
-  else if (m_lossModel == 3)
-    {
-      m_lossModelName = "ns3::TwoRayGroundPropagationLossModel";
-    }
-  else if (m_lossModel == 4)
-    {
-      m_lossModelName = "ns3::LogDistancePropagationLossModel";
-    }
-  else
-    {
-      // Unsupported propagation loss model.
-      // Treating as ERROR
-      NS_LOG_ERROR ("Invalid propagation loss model specified.  Values must be [1-4], where 1=Friis;2=ItuR1411Los;3=TwoRayGround;4=LogDistance");
-    }
-  
-  
-  
-  //BaseStationChannel
-  YansWifiChannelHelper WifiChannel;
-  WifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
-
-  if (m_lossModel == 3)
-    {
-      // two-ray requires antenna height (else defaults to Friss)
-      WifiChannel.AddPropagationLoss (m_lossModelName, "Frequency", DoubleValue (m_freq), "HeightAboveZ", DoubleValue (m_baseAntennaHeight));
-    }
-  else
-    {
-      WifiChannel.AddPropagationLoss (m_lossModelName, "Frequency", DoubleValue (m_freq));
-    }
-
-
-  Ptr<YansWifiChannel> Channel = WifiChannel.Create ();
-  
-
-  YansWifiPhyHelper basePhy = YansWifiPhyHelper::Default();
-  basePhy.SetChannel(Channel);
-  
-  YansWifiPhyHelper nodePhy = YansWifiPhyHelper::Default();
-  nodePhy.SetChannel(Channel);
-
-  basePhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11); //Tracing Stuff
-  nodePhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11);
-
-  WifiHelper wifi;
-  if(m_verbose){
-    wifi.EnableLogComponents();
-  }
-
-
-  basePhy.Set("TxGain",DoubleValue(m_baseAntennaGain));
-  nodePhy.Set("TxGain",DoubleValue(m_nodeAntennaGain));
-
-  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager");
-
+ 
 
   //Configuring the mac_layer
   if(m_macMode == 0){
+
+     if (m_lossModel == 1)
+    {
+      m_lossModelName = "ns3::FriisPropagationLossModel";
+    }
+    else if (m_lossModel == 2)
+      {
+        m_lossModelName = "ns3::ItuR1411LosPropagationLossModel";
+      }
+    else if (m_lossModel == 3)
+      {
+        m_lossModelName = "ns3::TwoRayGroundPropagationLossModel";
+      }
+    else if (m_lossModel == 4)
+      {
+        m_lossModelName = "ns3::LogDistancePropagationLossModel";
+      }
+    else
+      {
+        // Unsupported propagation loss model.
+        // Treating as ERROR
+        NS_LOG_ERROR ("Invalid propagation loss model specified.  Values must be [1-4], where 1=Friis;2=ItuR1411Los;3=TwoRayGround;4=LogDistance");
+      }
+    
+  //BaseStationChannel
+    YansWifiChannelHelper WifiChannel;
+    WifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
+
+    if (m_lossModel == 3)
+      {
+        // two-ray requires antenna height (else defaults to Friss)
+        WifiChannel.AddPropagationLoss (m_lossModelName, "Frequency", DoubleValue (m_freq), "HeightAboveZ", DoubleValue (m_baseAntennaHeight));
+      }
+    else
+      {
+        WifiChannel.AddPropagationLoss (m_lossModelName, "Frequency", DoubleValue (m_freq));
+      }
+
+
+    Ptr<YansWifiChannel> Channel = WifiChannel.Create ();
+    
+
+    YansWifiPhyHelper basePhy = YansWifiPhyHelper::Default();
+    basePhy.SetChannel(Channel);
+    
+    YansWifiPhyHelper nodePhy = YansWifiPhyHelper::Default();
+    nodePhy.SetChannel(Channel);
+
+    basePhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11); //Tracing Stuff
+    nodePhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11);
+
+    WifiHelper wifi;
+    if(m_verbose){
+      wifi.EnableLogComponents();
+    }
+
+
+    basePhy.Set("TxGain",DoubleValue(m_baseAntennaGain));
+    nodePhy.Set("TxGain",DoubleValue(m_nodeAntennaGain));
+
+    wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager");
+
     NqosWifiMacHelper wifiMac = NqosWifiMacHelper::Default ();
     Ssid ssid = Ssid("base-station");
     wifiMac.SetType ("ns3::StaWifiMac",
@@ -1220,9 +1380,9 @@ void Experiment::ConfigureMobility(){
   mobility.SetPositionAllocator ("ns3::GridPositionAllocator",
                                     "MinX", DoubleValue (50.0),
                                     "MinY", DoubleValue (0.0),
-                                    "DeltaX", DoubleValue (5.0),
+                                    "DeltaX", DoubleValue (1000.0),
                                     "DeltaY", DoubleValue (0.0),
-                                    "GridWidth", UintegerValue (10),
+                                    "GridWidth", UintegerValue (m_nBase),
                                     "LayoutType", StringValue ("RowFirst"));
   mobility.Install (m_baseNodes);
 
@@ -1234,7 +1394,19 @@ void Experiment::ConfigureMobility(){
   std::stringstream ssPause;
   ssPause << "ns3::ConstantRandomVariable[Constant=" << m_nodePause << "]";
 
-  if(m_mobility == 1){
+
+  if(m_mobility == 0){
+    //Stationary
+    mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+    mobility.SetPositionAllocator("ns3::GridPositionAllocator",
+                                  "MinX",DoubleValue(50.0),
+                                  "MinY",DoubleValue(m_yPos),
+                                  "DeltaX",DoubleValue(100.0),
+                                  "GridWidth",UintegerValue(m_nNodes),
+                                  "LayoutType",StringValue("RowFirst"));
+    mobility.Install(m_TxNodes);
+  }
+  else if(m_mobility == 1){
     //Random Walk
     ObjectFactory pos2;
     pos2.SetTypeId ("ns3::RandomBoxPositionAllocator");
@@ -1277,6 +1449,7 @@ void Experiment::ConfigureMobility(){
 
     m_streamIndex += mobility.AssignStreams (m_TxNodes, m_streamIndex);
   }
+ 
 
 
   Config::Connect ("/NodeList/*/$ns3::MobilityModel/CourseChange",
@@ -1296,6 +1469,21 @@ void Experiment::ConfigureApplications(){
   oss.str ("");
   oss << "/NodeList/*/ApplicationList/*/$ns3::OnOffApplication/Tx";
   Config::Connect (oss.str (), MakeCallback (&RoutingHelper::OnOffTrace, m_routingHelper));
+
+  // oss.str ("");
+  // oss << "/NodeList/*/ApplicationList/*/$ns3::UdpEchoServer/Rx";
+  // Config::Connect (oss.str (), MakeCallback (&RoutingHelper::EchoServerTrace, m_routingHelper));
+
+  // oss.str ("");
+  // oss << "/NodeList/*/ApplicationList/*/$ns3::UdpEchoClient/Tx";
+  // Config::Connect (oss.str (), MakeCallback (&RoutingHelper::EchoClientTxTrace, m_routingHelper));
+
+  // oss.str ("");
+  // oss << "/NodeList/*/ApplicationList/*/$ns3::UdpEchoClient/Tx";
+  // Config::Connect (oss.str (), MakeCallback (&RoutingHelper::EchoClientRxTrace, m_routingHelper));
+
+  //Config::Set("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/EnergyDetectionThreshold", DoubleValue(-82.0));
+
 }
 
 void Experiment::ConfigureTracing(){
@@ -1328,7 +1516,8 @@ void Experiment::ProcessOutputs(){
   
   double averageRoutingGoodputKbps = 0.0;
   uint32_t totalBytesTotal = m_routingHelper->GetRoutingStats ().GetCumulativeRxBytes ();
-  averageRoutingGoodputKbps = (((double) totalBytesTotal * 8.0) / m_TotalSimTime) / 1000.0;
+  double transimissionTime = (m_routingHelper->GetRoutingStats().GetLastRxTime() - m_routingHelper->GetRoutingStats().GetFirstTxTime()).ToDouble(Time::S);
+  averageRoutingGoodputKbps = ((double) totalBytesTotal * 8.0)/transimissionTime/1000;
   double pdr = ((double)m_routingHelper->GetRoutingStats().GetCumulativeRxPkts() * 100)/((double)m_routingHelper->GetRoutingStats().GetCumulativeTxPkts());
   double packetLoss = ((double)m_routingHelper->GetRoutingStats().GetCumulativeTxPkts() -  (double)m_routingHelper->GetRoutingStats().GetCumulativeRxPkts());
 
@@ -1341,10 +1530,13 @@ void Experiment::ProcessOutputs(){
   std::cout<<"Total Packets lost: "<<packetLoss<<"\n";
   std::cout<<"average Delay: "<<avgDelay<<" seconds\n";
 
-//Measure Throughput w.r.t no of nodes,
-    //Measure packet loss
-    //Measure Packet delivery ratio
-    //For STDMA change paramters such as SelectionInterval, Minimum Candidate size etc..
+  std::ostringstream oss;
+  oss.str ("");
+  oss << m_nNodes << "," << averageRoutingGoodputKbps << "," << avgDelay << ","
+   << m_routingHelper->GetRoutingStats ().GetCumulativeRxPkts ()
+   << "," << packetLoss << "," << pdr << std::endl;
+  m_fh->WriteData(oss.str());
+ 
     
 
 }
@@ -1374,6 +1566,8 @@ void Experiment::SetupLogFile(){
 
 void Experiment::SetDefaultAttributeValues(){
 
+
+  
   Config::SetDefault ("ns3::OnOffApplication::PacketSize",StringValue(std::to_string(m_packetSize)));
   Config::SetDefault ("ns3::OnOffApplication::DataRate",  StringValue (m_rate));
   Config::SetDefault ("ns3::SimpleWirelessChannel::MaxRange", DoubleValue (m_txp));
@@ -1385,10 +1579,29 @@ void Experiment::ConfigureDevices(){
  //Already done in ConfigureChannels
 }
 
+void Experiment::SetupScenario(){
+
+}
 
 
+
+std::string filename = "exp_out.csv";
+std::ofstream out_file(filename.c_str());
 int main (int argc, char *argv[])
 {
-  Experiment experiment;
-  experiment.Simulate (argc, argv);
+
+  // Experiment experiment;
+  // experiment.Simulate (argc, argv);
+
+  //Running stationary node with tdma txp = 40000
+
+  FileHandle fh = FileHandle("exp_stats.csv");
+  fh.WriteHeader("n_nodes,throughput,delay,packetRx,packetLoss,pdr");
+  double txp = 40000;
+  for(int i=10;i<100;i+=10){
+    
+    Experiment(3000,2,i,1,1,txp,&fh).Simulate(argc,argv);
+  }
+  
+  
 }
